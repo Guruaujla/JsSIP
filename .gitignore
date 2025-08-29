@@ -1,2 +1,8 @@
-/node_modules/
-/lib-es5/
+node_modules/
+dist/
+coverage/
+*.log
+pnpm-debug.log*
+*.tsbuildinfo
+**/vite.config.js
+**/vite.config.d.ts
