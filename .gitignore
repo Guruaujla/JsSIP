@@ -1,2 +1,5 @@
 /node_modules/
 /lib-es5/
+packages/*/node_modules/
+packages/*/dist/
+examples/*/node_modules/

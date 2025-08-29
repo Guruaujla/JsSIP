@@ -1,0 +1,17 @@
+{
+  "name": "minimal-webapp",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@company/voice-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "^5.1.0",
+    "typescript": "^5.4.2"
+  }
+}
