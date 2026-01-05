@@ -95,7 +95,7 @@ export class VoiceSDK {
     );
     this.ua.on(
       'newRTCSession',
-      ({ session, originator }: { session: RTCSession; originator: string }) => {
+      async ({ session, originator }: { session: RTCSession; originator: string }) => {
         const direction = originator === 'local' ? 'outbound' : 'inbound';
         const call = new SimpleCallSession(session, direction);
         this.sessions.set(call.id, call);
