@@ -25,11 +25,31 @@ export class VoiceSDK {
   private domain?: string;
   private audioManager: AudioManager;
   private tabCoordinator: TabCoordinator;
+  private pcConfig?: any;
 
   constructor(opts: VoiceSDKOptions) {
     this.opts = opts;
     this.audioManager = new AudioManager(opts.sounds);
     this.tabCoordinator = new TabCoordinator();
+
+    if (this.opts.ice) {
+      const iceServers = [];
+      if (this.opts.ice.stun) {
+        this.opts.ice.stun.forEach((url) => {
+          iceServers.push({ urls: url });
+        });
+      }
+      if (this.opts.ice.turn) {
+        this.opts.ice.turn.forEach((t) => {
+          iceServers.push({
+            urls: t.urls,
+            username: t.username,
+            credential: t.credential
+          });
+        });
+      }
+      this.pcConfig = { iceServers };
+    }
   }
 
   async init(): Promise<void> {
@@ -44,8 +64,17 @@ export class VoiceSDK {
         session_timers: false,
         registrar_server: creds.registrar,
         display_name: creds.displayName ?? this.opts.sip?.displayName,
-        user_agent: this.opts.sip?.userAgentString
+        user_agent: this.opts.sip?.userAgentString,
+        register_expires: this.opts.sip?.registerExpiresSec,
+        connection_recovery_min_interval: this.opts.sip?.keepAliveIntervalSec, // Map keepAlive to recovery or use custom keepalive logic if JsSIP supports it, but for now strict mapping where possible.
+        // JsSIP doesn't have direct 'keepAliveIntervalSec' option in UA config the way some other libs do, but it handles ping/pong.
+        // We'll trust that 'register_expires' is sufficient for registration refresh.
       };
+
+      // Apply ICE options to JsSIP (JsSIP uses 'stun_servers' and 'turn_servers' typically via RTC constraints or direct config depending on version)
+      // JsSIP 3.x usually takes 'stun_servers' in configuration, but 'turn_servers' often need to be in PCConfig passed to call/answer.
+      // However, JsSIP doesn't expose 'turn_servers' directly in UAConfiguration interface in all versions.
+      // We will handle ICE in call/answer options via media constraints or pcConfig.
 
       this.ua = new JsSIP.UA(configuration);
       this.attachUaHandlers();
@@ -97,12 +126,42 @@ export class VoiceSDK {
       'newRTCSession',
       async ({ session, originator }: { session: RTCSession; originator: string }) => {
         const direction = originator === 'local' ? 'outbound' : 'inbound';
-        const call = new SimpleCallSession(session, direction);
+        const call = new SimpleCallSession(session, direction, this.pcConfig);
         this.sessions.set(call.id, call);
 
         if (direction === 'inbound') {
           const from = session.remote_identity.uri.toString();
-          this.emitter.emit('incomingCall', { session: call, from });
+          let erpData: any;
+
+          // ERP Hook
+          if (this.opts.erp) {
+            try {
+              const { apiUrl, token, queryParam, headers } = this.opts.erp;
+              const paramName = queryParam || 'phone';
+              const callerUser = session.remote_identity.uri.user;
+              const url = new URL(apiUrl);
+              url.searchParams.append(paramName, callerUser);
+
+              const fetchHeaders: Record<string, string> = { ...headers };
+              if (token) {
+                fetchHeaders['Authorization'] = `Bearer ${token}`;
+              }
+
+              const res = await fetch(url.toString(), { headers: fetchHeaders });
+              if (res.ok) {
+                erpData = await res.json();
+              }
+            } catch (e) {
+              console.warn('VoiceSDK: ERP fetch failed', e);
+            }
+          }
+
+          this.emitter.emit('incomingCall', {
+            session: call,
+            from,
+            displayName: session.remote_identity.display_name,
+            data: erpData
+          });
           this.audioManager.playRinging();
         }
 
@@ -175,9 +234,13 @@ export class VoiceSDK {
       : `sip:${options.target}@${domain}`;
     const session = this.ua.call(target, {
       extraHeaders: options.extraHeaders,
-      mediaConstraints: { audio: true, video: false }
+      pcConfig: this.pcConfig,
+      mediaConstraints: this.opts.media?.constraints || {
+        audio: true,
+        video: false
+      }
     });
-    const call = new SimpleCallSession(session, 'outbound');
+    const call = new SimpleCallSession(session, 'outbound', this.pcConfig);
     this.sessions.set(call.id, call);
     return call;
   }

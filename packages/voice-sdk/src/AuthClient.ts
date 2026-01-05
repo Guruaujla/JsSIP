@@ -26,12 +26,23 @@ export async function fetchCredentials(
   authServer: string,
   token: string
 ): Promise<CredentialResponse> {
-  const res = await fetch(`${authServer}/sip-credentials`, {
+  const sanitizedServer = authServer.replace(/\/$/, '');
+  const res = await fetch(`${sanitizedServer}/sip-credentials`, {
     headers: { Authorization: `Bearer ${token}` }
   });
 
   if (!res.ok) {
-    throw new Error(`Auth failed with status ${res.status}`);
+    let errorMessage = `Auth failed with status ${res.status}`;
+    try {
+      const errorBody = await res.json();
+      if (errorBody && typeof errorBody === 'object') {
+        const msg = (errorBody as any).message || (errorBody as any).error;
+        if (msg) errorMessage += `: ${msg}`;
+      }
+    } catch {
+      // Ignore JSON parse error, keep default message
+    }
+    throw new Error(errorMessage);
   }
 
   const data = await res.json();

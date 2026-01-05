@@ -19,13 +19,15 @@ Initialize the SDK and make your first call.
 
 You need an **Auth Token** (from your backend) and the **Auth Server URL**.
 
+**Note:** The SDK will automatically append `/sip-credentials` to the `authServer` URL you provide. The server must return a JSON object compatible with the SDK's credential schema (containing `username`, `password`, `domain`, `wssUrl`, etc.).
+
 ```typescript
 import { VoiceSDK } from '@company/voice-sdk';
 
 // Initialize the SDK
 const sdk = new VoiceSDK({
   token: 'YOUR_ORG_TOKEN', // Token obtained from your backend
-  authServer: 'https://auth.your-company.com',
+  authServer: 'https://auth.your-company.com', // Request goes to https://auth.your-company.com/sip-credentials
   sounds: {
     ringtoneUrl: '/sounds/ringtone.mp3'
   }
@@ -39,6 +41,13 @@ try {
   console.error('Failed to initialize:', error);
 }
 ```
+
+### Multi-Tab Behavior (Leader Election)
+
+The Voice SDK supports running in multiple browser tabs, but **only one tab** (the "leader") will maintain an active connection to the SIP server to receive calls.
+*   The first tab opened becomes the leader.
+*   If the leader tab is closed, another tab will automatically take over as the leader and reconnect.
+*   You do not need to manage this manually; `init()` handles it for you.
 
 ### 2. Make an Outbound Call
 
