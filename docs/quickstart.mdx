@@ -1,0 +1,84 @@
+---
+title: "Quickstart"
+description: "Get up and running with the Voice SDK in minutes."
+---
+
+## Installation
+
+Install the package via npm or yarn:
+
+```bash
+npm install @company/voice-sdk
+```
+
+## Basic Usage
+
+Initialize the SDK and make your first call.
+
+### 1. Initialize the SDK
+
+You need an **Auth Token** (from your backend) and the **Auth Server URL**.
+
+```typescript
+import { VoiceSDK } from '@company/voice-sdk';
+
+// Initialize the SDK
+const sdk = new VoiceSDK({
+  token: 'YOUR_ORG_TOKEN', // Token obtained from your backend
+  authServer: 'https://auth.your-company.com',
+  sounds: {
+    ringtoneUrl: '/sounds/ringtone.mp3'
+  }
+});
+
+// Connect to the SIP server
+try {
+  await sdk.init();
+  console.log('Voice SDK initialized and connected!');
+} catch (error) {
+  console.error('Failed to initialize:', error);
+}
+```
+
+### 2. Make an Outbound Call
+
+```typescript
+// Call a phone number or SIP URI
+try {
+  const session = await sdk.call({ target: '1001' });
+
+  console.log(`Calling ${session.id}...`);
+
+  // Listen for call state changes
+  sdk.on('callUpdated', ({ session, state }) => {
+    console.log(`Call state: ${state}`);
+    if (state === 'established') {
+      console.log('Call connected!');
+    } else if (state === 'ended') {
+      console.log('Call ended.');
+    }
+  });
+
+} catch (error) {
+  console.error('Call failed:', error);
+}
+```
+
+### 3. Receive an Inbound Call
+
+Subscribe to the `incomingCall` event to handle incoming calls.
+
+```typescript
+sdk.on('incomingCall', ({ session, from }) => {
+  console.log(`Incoming call from ${from}`);
+
+  // Example: Show a UI modal to answer/reject
+  const userWantsToAnswer = confirm(`Incoming call from ${from}. Answer?`);
+
+  if (userWantsToAnswer) {
+    session.answer();
+  } else {
+    session.hangup();
+  }
+});
+```

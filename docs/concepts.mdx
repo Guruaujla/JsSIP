@@ -1,0 +1,62 @@
+---
+title: "Core Concepts"
+description: "Understand the key mechanisms driving the Voice SDK."
+---
+
+## Tab Coordination (Leader Election)
+
+Modern web applications often run in multiple browser tabs. A common issue with SIP/WebRTC apps is "registration fighting," where multiple tabs try to register the same SIP extension, causing connection flapping or ringing in all tabs simultaneously.
+
+The Voice SDK solves this with an internal **Leader Election** mechanism using the `BroadcastChannel` API.
+
+### How it Works
+
+1.  **Follower by Default**: When a tab opens, it starts as a "Follower".
+2.  **Election**: It checks if a "Leader" exists. If not, it promotes itself to "Leader".
+3.  **Leader Duties**: Only the Leader tab establishes the WebSocket connection and registers with the SIP server.
+4.  **Failover**: If the Leader tab is closed or crashes, a Follower automatically takes over and reconnects.
+
+### Developer Implications
+
+You generally don't need to manage this manually. The `VoiceSDK` handles it internally.
+
+*   `sdk.init()`: Calling this waits for election results. If the tab is a follower, it stays idle (no network traffic).
+*   **Events**: You can listen to connection state changes if you need to show UI indicators.
+
+```typescript
+sdk.on('connectionChanged', ({ state }) => {
+  if (state === 'connected') {
+    console.log('This tab is now the active phone connection.');
+  } else if (state === 'disconnected') {
+    console.log('This tab is standby.');
+  }
+});
+```
+
+<Note>
+  Only the active "Leader" tab can place or receive calls. If a user tries to call from a "Follower" tab, the SDK will throw an error advising them to use the active tab.
+</Note>
+
+## Audio Management
+
+The SDK includes a built-in `AudioManager` to handle the complexities of browser audio policies and WebRTC streams.
+
+### Ringtones
+
+You can configure a ringtone URL during initialization. The SDK plays this audio via an HTML5 Audio element when an inbound call arrives and stops it when answered/rejected.
+
+```typescript
+const sdk = new VoiceSDK({
+  // ...
+  sounds: {
+    ringtoneUrl: 'https://example.com/sounds/ring.mp3'
+  }
+});
+```
+
+### Remote Audio
+
+When a call is established, the SDK automatically:
+1.  Attaches the remote WebRTC media stream to an invisible `<audio>` element.
+2.  Handles auto-play policy errors (though user interaction is usually required to start the call anyway).
+3.  Cleans up the stream when the call ends.

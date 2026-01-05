@@ -1,0 +1,31 @@
+{
+  "name": "Voice SDK",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "favicon": "/favicon.png",
+  "colors": {
+    "primary": "#0F53FF",
+    "light": "#3D75FF",
+    "dark": "#0036CC"
+  },
+  "topbarCtaButton": {
+    "type": "github",
+    "url": "https://github.com/company/voice-sdk"
+  },
+  "navigation": [
+    {
+      "group": "Get Started",
+      "pages": ["introduction", "quickstart", "authentication", "concepts"]
+    },
+    {
+      "group": "Guides",
+      "pages": ["guides/crm-integration"]
+    },
+    {
+      "group": "Reference",
+      "pages": ["api-reference"]
+    }
+  ]
+}
