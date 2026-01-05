@@ -12,6 +12,9 @@ export interface VoiceSDKOptions {
     outputDeviceId?: string;
     constraints?: MediaTrackConstraints;
   };
+  sounds?: {
+    ringtoneUrl?: string;
+  };
   sip?: {
     displayName?: string;
     userAgentString?: string;
@@ -49,6 +52,18 @@ export type CallState =
   | 'ended'
   | 'failed';
 
+export interface CallSummary {
+  id: string;
+  direction: 'inbound' | 'outbound';
+  from: string;
+  to: string;
+  startTime: number;
+  answerTime?: number;
+  endTime?: number;
+  duration: number; // in seconds
+  result: 'Answered' | 'Missed' | 'Rejected' | 'Failed' | 'Busy';
+}
+
 export interface VoiceSDKEvents {
   ready: void;
   connectionChanged: {
@@ -65,6 +80,7 @@ export interface VoiceSDKEvents {
     data?: any;
   };
   callUpdated: { session: CallSession; state: CallState; reason?: string };
+  callSummary: CallSummary;
   deviceChanged: {
     microphones: MediaDeviceInfo[];
     speakers: MediaDeviceInfo[];
@@ -76,6 +92,9 @@ export interface CallSession {
   id: string;
   direction: 'inbound' | 'outbound';
   state: CallState;
+  startTime: number;
+  answerTime?: number;
+  endTime?: number;
   localStream?: MediaStream;
   remoteStream?: MediaStream;
   answer(options?: { audio?: boolean }): Promise<void>;
@@ -86,4 +105,5 @@ export interface CallSession {
   unmute(): Promise<void>;
   sendDTMF(tone: string): Promise<void>;
   transfer(target: string): Promise<void>;
+  getSummary(): CallSummary;
 }
