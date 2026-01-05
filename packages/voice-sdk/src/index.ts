@@ -110,14 +110,11 @@ export class VoiceSDK {
     );
     this.ua.on(
       'newRTCSession',
-      ({ session, originator }: { session: RTCSession; originator: string }) => {
+      async ({ session, originator }: { session: RTCSession; originator: string }) => {
         const direction = originator === 'local' ? 'outbound' : 'inbound';
         const call = new SimpleCallSession(session, direction);
         this.sessions.set(call.id, call);
-        if (direction === 'inbound') {
-          const from = session.remote_identity.uri.toString();
-          this.emitter.emit('incomingCall', { session: call, from });
-        }
+
         session.on('ended', () => {
           call.state = 'ended';
           this.emitter.emit('callUpdated', { session: call, state: 'ended' });
@@ -139,6 +136,43 @@ export class VoiceSDK {
             state: 'established'
           });
         });
+
+        if (direction === 'inbound') {
+          const from = session.remote_identity.uri.toString();
+          const user = session.remote_identity.uri.user;
+          let erpData: any;
+
+          if (this.opts.erp?.apiUrl) {
+            try {
+              const param = this.opts.erp.queryParam || 'phone';
+              const url = new URL(this.opts.erp.apiUrl);
+              url.searchParams.append(param, user);
+
+              const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+                ...this.opts.erp.headers
+              };
+              if (this.opts.erp.token) {
+                headers['Authorization'] = `Bearer ${this.opts.erp.token}`;
+              }
+
+              const res = await fetch(url.toString(), { headers });
+              if (res.ok) {
+                erpData = await res.json();
+              }
+            } catch (error) {
+              console.error('Failed to fetch ERP data', error);
+            }
+          }
+
+          if (call.state !== 'ended' && call.state !== 'failed') {
+            this.emitter.emit('incomingCall', {
+              session: call,
+              from,
+              data: erpData
+            });
+          }
+        }
       }
     );
   }

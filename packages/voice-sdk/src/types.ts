@@ -21,6 +21,16 @@ export interface VoiceSDKOptions {
     registrar?: string;
   };
   logging?: 'none' | 'error' | 'info' | 'debug';
+  erp?: {
+    apiUrl: string;
+    // Query param to use for the caller's number. Defaults to 'phone'.
+    queryParam?: string;
+    // Optional bearer token for the ERP API. If not provided, it won't be sent.
+    // If you need to reuse the main token, explicitely set this to the same token.
+    token?: string;
+    // Additional headers to send with the request
+    headers?: Record<string, string>;
+  };
 }
 
 export interface CallOptions {
@@ -48,7 +58,12 @@ export interface VoiceSDKEvents {
     state: 'registered' | 'unregistered' | 'failed';
     reason?: string;
   };
-  incomingCall: { session: CallSession; from: string; displayName?: string };
+  incomingCall: {
+    session: CallSession;
+    from: string;
+    displayName?: string;
+    data?: any;
+  };
   callUpdated: { session: CallSession; state: CallState; reason?: string };
   deviceChanged: {
     microphones: MediaDeviceInfo[];
