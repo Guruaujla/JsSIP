@@ -11,14 +11,21 @@ export class SimpleCallSession implements CallSession {
   public localStream?: MediaStream;
   public remoteStream?: MediaStream;
 
-  constructor(private session: RTCSession, direction: 'inbound' | 'outbound') {
+  constructor(
+    private session: RTCSession,
+    direction: 'inbound' | 'outbound',
+    private pcConfig?: any
+  ) {
     this.id = session.id;
     this.direction = direction;
     this.startTime = Date.now();
   }
 
-  async answer(): Promise<void> {
-    this.session.answer();
+  async answer(options?: { audio?: boolean }): Promise<void> {
+    this.session.answer({
+      pcConfig: this.pcConfig,
+      mediaConstraints: options?.audio === false ? { audio: false } : undefined
+    });
     this.state = 'established';
     this.answerTime = Date.now();
   }

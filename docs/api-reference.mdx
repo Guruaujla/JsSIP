@@ -18,10 +18,45 @@ new VoiceSDK(options: VoiceSDKOptions)
 | Property | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
 | `token` | `string` | Yes | The organizational token for authentication. |
-| `authServer` | `string` | Yes | The URL of the backend service to exchange the token for SIP credentials. |
+| `authServer` | `string` | Yes | The URL of the backend service to exchange the token for SIP credentials. The SDK appends `/sip-credentials` to this URL. |
+| `ice` | `IceOptions` | No | ICE configuration (STUN/TURN). |
+| `media` | `MediaOptions` | No | Media constraints and device selection. |
 | `sounds` | `{ ringtoneUrl?: string }` | No | Configuration for ringtone audio. |
 | `logging` | `'none' \| 'error' \| 'info' \| 'debug'` | No | Logging verbosity level. |
 | `sip` | `SipOptions` | No | Advanced SIP configuration (userAgent, keepAlive, etc). |
+| `erp` | `ErpOptions` | No | Configuration for ERP/CRM integration hooks. |
+
+**Interface Definitions:**
+
+```typescript
+interface IceOptions {
+  stun?: string[];
+  turn?: { urls: string[]; username: string; credential: string }[];
+  trickle?: boolean;
+}
+
+interface MediaOptions {
+  audioInputId?: string;
+  outputDeviceId?: string;
+  constraints?: MediaTrackConstraints;
+}
+
+interface SipOptions {
+  displayName?: string;
+  userAgentString?: string;
+  registerExpiresSec?: number;
+  keepAliveIntervalSec?: number;
+  outboundProxy?: string;
+  registrar?: string;
+}
+
+interface ErpOptions {
+  apiUrl: string;
+  queryParam?: string; // default 'phone'
+  token?: string;
+  headers?: Record<string, string>;
+}
+```
 
 ### Methods
 
@@ -34,6 +69,9 @@ async init(): Promise<void>
 Initializes the SDK, performs leader election, fetches credentials, and connects to the SIP server.
 *   **Returns**: Promise that resolves when connected (or leader election settles).
 *   **Throws**: `SDKError` if authentication fails.
+
+**Note on Leader Election:**
+The SDK uses `BroadcastChannel` to coordinate between tabs. Only one tab (the "leader") will maintain the active SIP registration. If `init()` is called in multiple tabs, only the leader will connect. If the leader tab is closed, a follower will promote itself and connect.
 
 #### `call()`
 
@@ -49,6 +87,8 @@ Initiates an outbound call.
 | :--- | :--- | :--- |
 | `options.target` | `string` | The destination number or SIP URI. |
 | `options.extraHeaders` | `string[]` | (Optional) Custom SIP headers. |
+| `options.withEarlyMedia` | `boolean` | (Optional) Enable early media. |
+| `options.dtmfMode` | `'RFC2833' \| 'SIP_INFO'` | (Optional) DTMF mode. |
 
 *   **Returns**: `Promise<CallSession>`
 *   **Throws**: Error if SDK is not initialized or network is unavailable.
@@ -73,11 +113,14 @@ Subscribe to SDK events. Returns an unsubscribe function.
 
 | Event | Payload | Description |
 | :--- | :--- | :--- |
-| `connectionChanged` | `{ state: ConnectionState }` | Fired when WebSocket/SIP connection state changes. |
-| `incomingCall` | `{ session: CallSession, from: string }` | Fired when a new call is received. |
-| `callUpdated` | `{ session: CallSession, state: CallState }` | Fired when a call's state changes (ringing, connected, ended). |
-| `callSummary` | `CallSummary` | Fired after a call ends, containing duration and result. |
-| `error` | `{ code: string, message: string }` | Fired on global errors. |
+| `ready` | `void` | Fired when the SDK is ready. |
+| `connectionChanged` | `{ state: 'connecting' \| 'connected' \| 'disconnected' \| 'reconnecting' }` | Fired when WebSocket/SIP connection state changes. |
+| `registrationChanged` | `{ state: 'registered' \| 'unregistered' \| 'failed', reason?: string }` | Fired when SIP registration status changes. |
+| `incomingCall` | `{ session: CallSession, from: string, displayName?: string, data?: any }` | Fired when a new call is received. |
+| `callUpdated` | `{ session: CallSession, state: CallState, reason?: string }` | Fired when a call's state changes. |
+| `callSummary` | `CallSummary` | Fired after a call ends. |
+| `deviceChanged` | `{ microphones: MediaDeviceInfo[], speakers: MediaDeviceInfo[] }` | Fired when audio devices change. |
+| `error` | `{ code: string, message: string, cause?: unknown }` | Fired on global errors. |
 
 ---
 
@@ -91,7 +134,7 @@ Represents an individual phone call.
 | :--- | :--- | :--- |
 | `id` | `string` | Unique identifier for the call. |
 | `direction` | `'inbound' \| 'outbound'` | Direction of the call. |
-| `state` | `CallState` | Current state (`new`, `ringing`, `established`, `ended`, `failed`). |
+| `state` | `CallState` | Current state (`new`, `ringing`, `established`, `held`, `muted`, `ended`, `failed`). |
 
 ### Methods
 
@@ -108,6 +151,14 @@ Answers an incoming call.
 async hangup(): Promise<void>
 ```
 Ends the call.
+
+#### `hold()` / `resume()`
+
+```typescript
+async hold(): Promise<void>
+async resume(): Promise<void>
+```
+Places the call on hold or resumes it.
 
 #### `mute()` / `unmute()`
 
@@ -131,11 +182,18 @@ async transfer(target: string): Promise<void>
 ```
 Blind transfers the call to a new target.
 
+#### `getSummary()`
+
+```typescript
+getSummary(): CallSummary
+```
+Returns the summary of the call.
+
 ---
 
 ## `interface CallSummary`
 
-The payload for the `callSummary` event. Useful for logging.
+The payload for the `callSummary` event. Useful for ERP/CRM logging.
 
 | Property | Type | Description |
 | :--- | :--- | :--- |
@@ -144,5 +202,7 @@ The payload for the `callSummary` event. Useful for logging.
 | `from` | `string` | Caller URI. |
 | `to` | `string` | Callee URI. |
 | `startTime` | `number` | Unix timestamp of call start. |
-| `duration` | `number` | Duration in seconds (0 if missed/failed). |
+| `answerTime` | `number` | Unix timestamp of answer (optional). |
+| `endTime` | `number` | Unix timestamp of call end (optional). |
+| `duration` | `number` | Duration in seconds (talk time). |
 | `result` | `'Answered' \| 'Missed' \| 'Rejected' \| 'Failed' \| 'Busy'` | Final outcome of the call. |

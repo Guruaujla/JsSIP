@@ -3,6 +3,15 @@ import { VoiceSDK } from '../src/index';
 import { VoiceSDKOptions } from '../src/types';
 import JsSIP from 'jssip';
 
+// Mock Audio
+global.Audio = vi.fn().mockImplementation(() => ({
+  play: vi.fn().mockResolvedValue(undefined),
+  pause: vi.fn(),
+  srcObject: null,
+  autoplay: false,
+  loop: false,
+}));
+
 // Mock JsSIP
 vi.mock('jssip', () => {
   // Simple EventEmitter implementation for the mock
