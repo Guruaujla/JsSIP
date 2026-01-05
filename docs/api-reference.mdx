@@ -1,0 +1,148 @@
+---
+title: "API Reference"
+description: "Detailed documentation for the Voice SDK API."
+---
+
+## `class VoiceSDK`
+
+The main entry point for the library.
+
+### Constructor
+
+```typescript
+new VoiceSDK(options: VoiceSDKOptions)
+```
+
+#### `VoiceSDKOptions`
+
+| Property | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `token` | `string` | Yes | The organizational token for authentication. |
+| `authServer` | `string` | Yes | The URL of the backend service to exchange the token for SIP credentials. |
+| `sounds` | `{ ringtoneUrl?: string }` | No | Configuration for ringtone audio. |
+| `logging` | `'none' \| 'error' \| 'info' \| 'debug'` | No | Logging verbosity level. |
+| `sip` | `SipOptions` | No | Advanced SIP configuration (userAgent, keepAlive, etc). |
+
+### Methods
+
+#### `init()`
+
+```typescript
+async init(): Promise<void>
+```
+
+Initializes the SDK, performs leader election, fetches credentials, and connects to the SIP server.
+*   **Returns**: Promise that resolves when connected (or leader election settles).
+*   **Throws**: `SDKError` if authentication fails.
+
+#### `call()`
+
+```typescript
+async call(options: CallOptions): Promise<CallSession>
+```
+
+Initiates an outbound call.
+
+**Parameters:**
+
+| Name | Type | Description |
+| :--- | :--- | :--- |
+| `options.target` | `string` | The destination number or SIP URI. |
+| `options.extraHeaders` | `string[]` | (Optional) Custom SIP headers. |
+
+*   **Returns**: `Promise<CallSession>`
+*   **Throws**: Error if SDK is not initialized or network is unavailable.
+
+#### `getActiveSessions()`
+
+```typescript
+getActiveSessions(): CallSession[]
+```
+
+Returns an array of currently active `CallSession` objects.
+
+#### `on()`
+
+```typescript
+on(event: string, handler: Function): () => void
+```
+
+Subscribe to SDK events. Returns an unsubscribe function.
+
+### Events (`VoiceSDKEvents`)
+
+| Event | Payload | Description |
+| :--- | :--- | :--- |
+| `connectionChanged` | `{ state: ConnectionState }` | Fired when WebSocket/SIP connection state changes. |
+| `incomingCall` | `{ session: CallSession, from: string }` | Fired when a new call is received. |
+| `callUpdated` | `{ session: CallSession, state: CallState }` | Fired when a call's state changes (ringing, connected, ended). |
+| `callSummary` | `CallSummary` | Fired after a call ends, containing duration and result. |
+| `error` | `{ code: string, message: string }` | Fired on global errors. |
+
+---
+
+## `interface CallSession`
+
+Represents an individual phone call.
+
+### Properties
+
+| Property | Type | Description |
+| :--- | :--- | :--- |
+| `id` | `string` | Unique identifier for the call. |
+| `direction` | `'inbound' \| 'outbound'` | Direction of the call. |
+| `state` | `CallState` | Current state (`new`, `ringing`, `established`, `ended`, `failed`). |
+
+### Methods
+
+#### `answer()`
+
+```typescript
+async answer(options?: { audio?: boolean }): Promise<void>
+```
+Answers an incoming call.
+
+#### `hangup()`
+
+```typescript
+async hangup(): Promise<void>
+```
+Ends the call.
+
+#### `mute()` / `unmute()`
+
+```typescript
+async mute(): Promise<void>
+async unmute(): Promise<void>
+```
+Toggles the local microphone audio.
+
+#### `sendDTMF()`
+
+```typescript
+async sendDTMF(tone: string): Promise<void>
+```
+Sends a DTMF tone (0-9, *, #) to the remote peer.
+
+#### `transfer()`
+
+```typescript
+async transfer(target: string): Promise<void>
+```
+Blind transfers the call to a new target.
+
+---
+
+## `interface CallSummary`
+
+The payload for the `callSummary` event. Useful for logging.
+
+| Property | Type | Description |
+| :--- | :--- | :--- |
+| `id` | `string` | Call ID. |
+| `direction` | `'inbound' \| 'outbound'` | Direction. |
+| `from` | `string` | Caller URI. |
+| `to` | `string` | Callee URI. |
+| `startTime` | `number` | Unix timestamp of call start. |
+| `duration` | `number` | Duration in seconds (0 if missed/failed). |
+| `result` | `'Answered' \| 'Missed' \| 'Rejected' \| 'Failed' \| 'Busy'` | Final outcome of the call. |

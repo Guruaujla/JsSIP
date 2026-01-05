@@ -1,0 +1,103 @@
+---
+title: "ERP/CRM Integration"
+description: "Best practices for integrating voice into enterprise workflows."
+---
+
+Integrations typically involve three key features:
+1.  **Screen Pops**: Showing customer data when a call comes in.
+2.  **Activity Logging**: Automatically saving call history to the customer record.
+3.  **Click-to-Call**: Enabling users to dial directly from the contact list.
+
+## 1. Screen Pops (Inbound)
+
+Use the `incomingCall` event to trigger UI changes. The `session` object provides the caller's identity.
+
+```typescript
+sdk.on('incomingCall', async ({ session, from, displayName }) => {
+  // 'from' is usually a SIP URI like "sip:1234567890@domain.com"
+  // You might want to parse out the phone number.
+  const phoneNumber = from.split('@')[0].split(':')[1];
+
+  // 1. Trigger your CRM to search for this number
+  const contact = await myCrmApi.searchContact({ phone: phoneNumber });
+
+  // 2. Display a modal or "Toast" notification
+  showCallNotification({
+    title: `Incoming Call: ${displayName || 'Unknown'}`,
+    subtitle: contact ? contact.name : phoneNumber,
+    onAnswer: () => session.answer(),
+    onReject: () => session.hangup()
+  });
+});
+```
+
+## 2. Activity Logging
+
+Reliable logging is critical for business metrics. Do not rely on the `incomingCall` event for logging, as calls might be missed or rejected.
+
+Instead, use the `callSummary` event, which fires **after every call ends**, regardless of the outcome (answered, missed, failed).
+
+```typescript
+sdk.on('callSummary', async (summary) => {
+  console.log('Call finished:', summary);
+  /*
+  summary = {
+    id: "call_12345...",
+    direction: "inbound" | "outbound",
+    from: "sip:alice@...",
+    to: "sip:bob@...",
+    startTime: 1699999999,
+    duration: 120, // seconds
+    result: "Answered" | "Missed" | "Rejected" | "Failed"
+  }
+  */
+
+  // Send to your backend/CRM
+  await myCrmApi.logActivity({
+    type: 'call',
+    direction: summary.direction,
+    duration: summary.duration,
+    result: summary.result,
+    participants: [summary.from, summary.to],
+    timestamp: new Date(summary.startTime)
+  });
+});
+```
+
+## 3. Click-to-Call (Outbound)
+
+Add click handlers to phone numbers in your UI.
+
+```typescript
+// React Example
+const ContactCard = ({ contact }) => {
+  const handleCall = async () => {
+    try {
+      await sdk.call({ target: contact.phoneNumber });
+    } catch (err) {
+      alert('Failed to start call: ' + err.message);
+    }
+  };
+
+  return (
+    <div className="contact-card">
+      <h3>{contact.name}</h3>
+      <button onClick={handleCall}>
+        📞 {contact.phoneNumber}
+      </button>
+    </div>
+  );
+};
+```
+
+## Handling Multiple Tabs in CRM
+
+If your CRM is often open in multiple tabs, remember the **Leader Election** concept.
+
+*   **Inbound**: The `incomingCall` event fires in **all** tabs (internally synchronized via `BroadcastChannel`, or if the SDK implementation propagates it).
+    *   *Correction*: Currently, only the **Leader** tab maintains the connection. If you need notifications in all tabs, you must use your own `BroadcastChannel` or local storage events to signal other tabs to show the popup.
+*   **Outbound**: You must ensure `sdk.call()` is only invoked on the active leader, or handle the error gracefully.
+
+<Tip>
+  For a seamless experience, disable the "Call" button in Follower tabs, or have the button send a message to the Leader tab to initiate the call.
+</Tip>

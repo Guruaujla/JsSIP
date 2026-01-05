@@ -1,0 +1,85 @@
+---
+title: "Authentication"
+description: "How the Voice SDK handles authentication via your backend."
+---
+
+## Overview
+
+The Voice SDK does not directly authenticate with the SIP server using static credentials. Instead, it uses a **Token Exchange** mechanism to securely retrieve dynamic SIP credentials (username, password, domain, WSS URL) at runtime.
+
+This approach ensures:
+*   **Security**: SIP passwords are never exposed to the frontend permanently.
+*   **Rotation**: Credentials can be rotated without updating client code.
+*   **Multi-tenancy**: The auth server can dynamically assign SIP accounts based on the user's identity.
+
+## Authentication Flow
+
+1.  **Frontend**: Your application authenticates the user (e.g., via OAuth2, session cookie).
+2.  **Frontend**: Requests a "Voice Token" or uses an existing API token from your backend.
+3.  **SDK Init**: You pass this token to `new VoiceSDK({ token: '...' })`.
+4.  **SDK Internal**: The SDK makes a POST request to the configured `authServer`.
+5.  **Response**: The auth server returns the temporary SIP credentials.
+6.  **Connection**: The SDK connects to the SIP WSS endpoint using these credentials.
+
+## Backend Implementation
+
+Your backend must provide an endpoint (the `authServer`) that validates the token and returns the SIP configuration.
+
+### Request
+
+The SDK will make a `POST` request to the URL provided in `VoiceSDKOptions.authServer`.
+
+**Headers:**
+```http
+Authorization: Bearer <token_provided_in_sdk_options>
+Content-Type: application/json
+```
+
+### Response Schema
+
+The backend must return a JSON object with the following structure:
+
+```json
+{
+  "username": "1001",
+  "password": "secret_sip_password",
+  "domain": "sip.example.com",
+  "wssUrl": "wss://sip.example.com:8089/ws",
+  "registrar": "sip:sip.example.com",
+  "displayName": "John Doe"
+}
+```
+
+### Example (Node.js/Express)
+
+```javascript
+app.post('/api/voice/credentials', verifyAuthToken, async (req, res) => {
+  const userId = req.user.id;
+
+  // Logic to fetch or generate SIP credentials for this user
+  const sipAccount = await SIPService.getAccountForUser(userId);
+
+  res.json({
+    username: sipAccount.username,
+    password: sipAccount.password,
+    domain: "sip.mycompany.com",
+    wssUrl: "wss://sip.mycompany.com/ws",
+    registrar: "sip:sip.mycompany.com",
+    displayName: req.user.name
+  });
+});
+```
+
+## Handling Auth Errors
+
+If the `authServer` returns a 401 or 403, the `sdk.init()` promise will reject with an `AUTH_FAILED` error.
+
+```typescript
+try {
+  await sdk.init();
+} catch (err) {
+  if (err.code === 'AUTH_FAILED') {
+    // Prompt user to re-login or refresh token
+  }
+}
+```
